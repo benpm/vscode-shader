@@ -5,60 +5,65 @@ import { resolveAllIncludes } from '../includeResolver';
 
 /**
  * Search for a symbol definition in the given text
+ * Note: These patterns are designed to match the original symbolProvider patterns,
+ * which match definitions at the start of lines (after optional whitespace)
  */
 function findDefinitionInText(name: string, text: string, uri: Uri): Location | null {
-    // Search for function definitions
-    const functionPattern = new RegExp(`^\\w+\\s+(${name})\\s*\\(`, 'gm');
+    // Escape special regex characters in the name
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    // Search for function definitions (allows for indentation and modifiers)
+    const functionPattern = new RegExp(`^\\s*(?:\\w+\\s+)*\\b(${escapedName})\\s*\\(`, 'gm');
     let match = functionPattern.exec(text);
     if (match) {
         const lines = text.substring(0, match.index).split(/\r?\n/);
         const lineNum = lines.length - 1;
-        const lineText = lines[lineNum] || '';
-        const col = lineText.indexOf(name);
+        const fullLine = text.split(/\r?\n/)[lineNum] || '';
+        const col = fullLine.indexOf(name);
         return new Location(uri, new Position(lineNum, col >= 0 ? col : 0));
     }
 
     // Search for struct/cbuffer/tbuffer definitions
-    const structPattern = new RegExp(`^(?:struct|cbuffer|tbuffer)\\s+(${name})\\b`, 'gm');
+    const structPattern = new RegExp(`^\\s*(?:struct|cbuffer|tbuffer)\\s+(${escapedName})\\b`, 'gm');
     match = structPattern.exec(text);
     if (match) {
         const lines = text.substring(0, match.index).split(/\r?\n/);
         const lineNum = lines.length - 1;
-        const lineText = lines[lineNum] || '';
-        const col = lineText.indexOf(name);
+        const fullLine = text.split(/\r?\n/)[lineNum] || '';
+        const col = fullLine.indexOf(name);
         return new Location(uri, new Position(lineNum, col >= 0 ? col : 0));
     }
 
     // Search for variable definitions (samplers)
-    const samplerPattern = new RegExp(`^(?:sampler|sampler1D|sampler2D|sampler3D|samplerCUBE|samplerRECT|sampler_state|SamplerState)\\s+(${name})\\b`, 'gm');
+    const samplerPattern = new RegExp(`^\\s*(?:sampler|sampler1D|sampler2D|sampler3D|samplerCUBE|samplerRECT|sampler_state|SamplerState)\\s+(${escapedName})\\b`, 'gm');
     match = samplerPattern.exec(text);
     if (match) {
         const lines = text.substring(0, match.index).split(/\r?\n/);
         const lineNum = lines.length - 1;
-        const lineText = lines[lineNum] || '';
-        const col = lineText.indexOf(name);
+        const fullLine = text.split(/\r?\n/)[lineNum] || '';
+        const col = fullLine.indexOf(name);
         return new Location(uri, new Position(lineNum, col >= 0 ? col : 0));
     }
 
     // Search for texture definitions
-    const texturePattern = new RegExp(`^(?:texture|texture2D|textureCUBE|Texture1D|Texture1DArray|Texture2D|Texture2DArray|Texture2DMS|Texture2DMSArray|Texture3D|TextureCube|TextureCubeArray|RWTexture1D|RWTexture1DArray|RWTexture2D|RWTexture2DArray|RWTexture3D)(?:\\s*<[^>]*>)?\\s+(${name})\\b`, 'gm');
+    const texturePattern = new RegExp(`^\\s*(?:texture|texture2D|textureCUBE|Texture1D|Texture1DArray|Texture2D|Texture2DArray|Texture2DMS|Texture2DMSArray|Texture3D|TextureCube|TextureCubeArray|RWTexture1D|RWTexture1DArray|RWTexture2D|RWTexture2DArray|RWTexture3D)(?:\\s*<[^>]*>)?\\s+(${escapedName})\\b`, 'gm');
     match = texturePattern.exec(text);
     if (match) {
         const lines = text.substring(0, match.index).split(/\r?\n/);
         const lineNum = lines.length - 1;
-        const lineText = lines[lineNum] || '';
-        const col = lineText.indexOf(name);
+        const fullLine = text.split(/\r?\n/)[lineNum] || '';
+        const col = fullLine.indexOf(name);
         return new Location(uri, new Position(lineNum, col >= 0 ? col : 0));
     }
 
     // Search for buffer definitions
-    const bufferPattern = new RegExp(`^(?:AppendStructuredBuffer|Buffer|ByteAddressBuffer|ConsumeStructuredBuffer|RWBuffer|RWByteAddressBuffer|RWStructuredBuffer|StructuredBuffer)(?:\\s*<[^>]*>)?\\s+(${name})\\b`, 'gm');
+    const bufferPattern = new RegExp(`^\\s*(?:AppendStructuredBuffer|Buffer|ByteAddressBuffer|ConsumeStructuredBuffer|RWBuffer|RWByteAddressBuffer|RWStructuredBuffer|StructuredBuffer)(?:\\s*<[^>]*>)?\\s+(${escapedName})\\b`, 'gm');
     match = bufferPattern.exec(text);
     if (match) {
         const lines = text.substring(0, match.index).split(/\r?\n/);
         const lineNum = lines.length - 1;
-        const lineText = lines[lineNum] || '';
-        const col = lineText.indexOf(name);
+        const fullLine = text.split(/\r?\n/)[lineNum] || '';
+        const col = fullLine.indexOf(name);
         return new Location(uri, new Position(lineNum, col >= 0 ? col : 0));
     }
 

@@ -31,9 +31,8 @@ export interface ResolvedInclude {
 export function parseIncludes(text: string): IncludeDirective[] {
     const includes: IncludeDirective[] = [];
     
-    // Match #include "file" or #include <file>
-    const includeRegex = /^\s*#\s*include\s+(?:["<])([^">]+)(?:[">])/gm;
-    const systemIncludeRegex = /^\s*#\s*include\s+<[^>]+>/;
+    // Match #include "file" or #include <file> and capture the quote type
+    const includeRegex = /^\s*#\s*include\s+(["<])([^">]+)[">]/gm;
     
     let match: RegExpExecArray | null;
     const lines = text.split(/\r?\n/);
@@ -44,9 +43,9 @@ export function parseIncludes(text: string): IncludeDirective[] {
         match = includeRegex.exec(line);
         if (match) {
             includes.push({
-                path: match[1],
+                path: match[2],
                 line: lineNum,
-                isSystemInclude: systemIncludeRegex.test(line)
+                isSystemInclude: match[1] === '<'
             });
         }
     }
