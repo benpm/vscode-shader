@@ -4,6 +4,7 @@ import { DocumentSymbolProvider, WorkspaceSymbolProvider, SymbolKind, SymbolInfo
 import { rgPath, hlslExtensions } from '../common';
 import { execSync } from 'child_process';
 import { join } from 'path';
+import { resolveAllIncludes, getDocumentText } from '../includeResolver';
 
 interface ISymbolPattern { kind: SymbolKind, pattern: string }
 
@@ -16,6 +17,46 @@ const searchPatterns: ISymbolPattern[] = [
 ];
 
 export interface ISymbolCache { [path: string]: SymbolInformation[]; }
+
+/**
+ * Extract symbols from text content
+ */
+function extractSymbolsFromText(text: string, uri: Uri): SymbolInformation[] {
+    const result: SymbolInformation[] = [];
+    const lines = text.split(/\r?\n/);
+
+    for (const entry of searchPatterns) {
+        const kind = entry.kind;
+        const pattern = entry.pattern;
+        const regex = new RegExp(pattern, "gm");
+        let match: RegExpExecArray | null;
+
+        while ((match = regex.exec(text)) !== null) {
+            // Calculate line number from character position
+            let charCount = 0;
+            let lineNum = 0;
+            for (let i = 0; i < lines.length; i++) {
+                if (charCount + lines[i].length >= match.index) {
+                    lineNum = i;
+                    break;
+                }
+                charCount += lines[i].length + 1; // +1 for newline
+            }
+
+            const word = match[1];
+            const position = new Position(lineNum, 0);
+            const lineText = lines[lineNum] || '';
+            const wordStart = lineText.indexOf(word);
+            const startPos = new Position(lineNum, wordStart >= 0 ? wordStart : 0);
+            const endPos = new Position(lineNum, wordStart >= 0 ? wordStart + word.length : lineText.length);
+            const range = new Range(startPos, endPos);
+
+            result.push(new SymbolInformation(word, kind, '', new Location(uri, range)));
+        }
+    }
+
+    return result;
+}
 
 export default class HLSLDocumentSymbolProvider implements DocumentSymbolProvider, WorkspaceSymbolProvider {
 
@@ -47,57 +88,64 @@ export default class HLSLDocumentSymbolProvider implements DocumentSymbolProvide
         }
     }
 
-    private getDocumentSymbols(uri: Uri): Promise<SymbolInformation[]> {
-        return new Promise<SymbolInformation[]>((resolve, reject) => {
-            let result: SymbolInformation[] = [];
+    private async getDocumentSymbols(uri: Uri): Promise<SymbolInformation[]> {
+        let result: SymbolInformation[] = [];
 
-            let document: TextDocument = null;
-            for (let d of workspace.textDocuments) {
-                if (d.uri.toString() === uri.toString()) {
-                    document = d;
-                    break;
+        let document: TextDocument = null;
+        for (let d of workspace.textDocuments) {
+            if (d.uri.toString() === uri.toString()) {
+                document = d;
+                break;
+            }
+        }
+
+        if (document === null) {
+            return [];
+        }
+
+        let text = document.getText();
+
+        function fetchSymbol(entry: ISymbolPattern) {
+            const kind = entry.kind;
+            const pattern = entry.pattern;
+
+            let regex = new RegExp(pattern, "gm");
+            let match: RegExpExecArray = null;
+            while (match = regex.exec(text)) {
+                let line = document.positionAt(match.index).line;
+                let range = document.lineAt(line).range;
+                let word = match[1];
+
+                let lastChar =  kind === SymbolKind.Function ? ')' :
+                                kind === SymbolKind.Struct ? '}' :
+                                kind === SymbolKind.Variable ? ';' :
+                                kind === SymbolKind.Field ? ';' :
+                                '';
+
+                if (lastChar) {
+                    let end = text.indexOf(lastChar, match.index) + 1;
+                    range = new Range(range.start, document.positionAt(end));
                 }
+                result.push(new SymbolInformation(word, kind, '', new Location(document.uri, range)));
             }
+        }
 
-            if (document === null) {
-                resolve([]);
-                return;
+        for (let entry of searchPatterns) {
+            fetchSymbol(entry);
+        }
+
+        // Also extract symbols from included files
+        try {
+            const includes = await resolveAllIncludes(document);
+            for (const include of includes) {
+                const includeSymbols = extractSymbolsFromText(include.content, include.uri);
+                result.push(...includeSymbols);
             }
+        } catch (e) {
+            console.warn('Failed to resolve includes for symbols:', e);
+        }
 
-            let text = document.getText();
-
-            function fetchSymbol(entry: ISymbolPattern) {
-                const kind = entry.kind;
-                const pattern = entry.pattern;
-
-                let regex = new RegExp(pattern, "gm");
-                let match: RegExpExecArray = null;
-                while (match = regex.exec(text)) {
-                    let line = document.positionAt(match.index).line;
-                    let range = document.lineAt(line).range;
-                    let word = match[1];
-
-                    let lastChar =  kind === SymbolKind.Function ? ')' :
-                                    kind === SymbolKind.Struct ? '}' :
-                                    kind === SymbolKind.Variable ? ';' :
-                                    kind === SymbolKind.Field ? ';' :
-                                    '';
-
-                    if (lastChar) {
-                        let end = text.indexOf(lastChar, match.index) + 1;
-                        range = new Range(range.start, document.positionAt(end));
-                    }
-                    result.push(new SymbolInformation(word, kind, '', new Location(document.uri, range)));
-                }
-            }
-
-            for (let entry of searchPatterns) {
-                fetchSymbol(entry);
-            }
-
-            resolve(result);
-
-        });
+        return result;
     }
 
     public provideDocumentSymbols(document: TextDocument, token: CancellationToken): Thenable<SymbolInformation[]> {

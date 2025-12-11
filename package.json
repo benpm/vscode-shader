@@ -161,6 +161,14 @@
 					"type": "boolean",
 					"default": true,
 					"description": "Open the HLSL Documentation links on the side"
+				},
+				"shader.includePaths": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"default": [],
+					"description": "Additional paths to search for #include directives. Relative paths are resolved from workspace folders."
 				}
 			}
 		}
