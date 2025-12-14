@@ -48,6 +48,29 @@ Clicking on the link in the Hover box will open HLSL documentation (when availab
 
 * `hlsl.suggest.basic` Configures if the HLSL language suggestions are enabled
 * `hlsl.openDocOnSide` Open HLSL Documentation link in editor and on the side, instead of in external browser
+* `shader.includePaths` Additional paths to search for `#include` directives. Relative paths are resolved from workspace folders.
+
+### Include Directive Support
+
+The extension supports `#include` preprocessor directives, which are commonly used in shader code:
+
+* **Go to Definition**: Ctrl+Click (or Cmd+Click on Mac) on an include path to open the included file
+* **Symbol Resolution**: Symbols from included files are available for Go to Definition, Find References, and Hover
+* **Nested Includes**: The extension recursively resolves nested includes (up to 10 levels deep)
+
+Both `#include "path/to/file.h"` (local) and `#include <path/to/file.h>` (system) styles are supported:
+- Local includes (`""`) search relative to the current file first, then configured paths
+- System includes (`<>`) search configured paths first, then relative to the current file
+
+To configure additional include paths, add them to your workspace or user settings:
+```json
+{
+    "shader.includePaths": [
+        "shaders/include",
+        "/absolute/path/to/includes"
+    ]
+}
+```
 
 ## Installation
 

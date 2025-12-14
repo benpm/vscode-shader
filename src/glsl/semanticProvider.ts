@@ -1,4 +1,5 @@
 import { DocumentSemanticTokensProvider, SemanticTokensLegend, TextDocument, CancellationToken, SemanticTokens, SemanticTokensBuilder } from 'vscode';
+import { resolveAllIncludes } from '../includeResolver';
 
 const tokenTypes = new Map<string, number>();
 
@@ -30,7 +31,26 @@ interface IParsedToken {
 
 export class GLSLSemanticProvider implements DocumentSemanticTokensProvider {
     async provideDocumentSemanticTokens(document: TextDocument, token: CancellationToken): Promise<SemanticTokens> {
-        const allTokens = this.parseText(document.getText());
+        // Get struct names from the current document
+        const text = document.getText();
+        let structs = this.extractStructNames(text);
+        
+        // Also get struct names from included files
+        try {
+            const includes = await resolveAllIncludes(document);
+            for (const include of includes) {
+                const includeStructs = this.extractStructNames(include.content);
+                structs = structs.concat(includeStructs);
+            }
+        } catch (e) {
+            console.warn('Failed to resolve includes for semantic tokens:', e);
+        }
+        
+        // Keep only unique struct names
+        structs = [...new Set(structs)];
+        
+        // Parse tokens only for the current document (semantic tokens only apply to the current document)
+        const allTokens = this.parseTextWithStructs(text, structs);
         const builder = new SemanticTokensBuilder();
         allTokens.forEach((token) => {
             builder.push(token.line, token.startCharacter, token.length, 0, 0);
@@ -53,13 +73,25 @@ export class GLSLSemanticProvider implements DocumentSemanticTokensProvider {
         return name.length > 0;
     }
 
-    private parseText(text: string): IParsedToken[] {
-        const r: IParsedToken[] = [];
-
+    /**
+     * Extract struct names from text
+     */
+    private extractStructNames(text: string): string[] {
         const structDefRegex = /\bstruct\b(\s)+[A-z|a-z|0-9|_]+/g;
-        const structs = text.match(structDefRegex).map(struct =>
+        const matches = text.match(structDefRegex);
+        if (!matches) {
+            return [];
+        }
+        return matches.map(struct =>
             struct?.replace(/\bstruct\b(\s)+/, '')
         ).filter(structName => structName && this.isVaidStructName(structName));
+    }
+
+    /**
+     * Parse text with given struct names to find all references
+     */
+    private parseTextWithStructs(text: string, structs: string[]): IParsedToken[] {
+        const r: IParsedToken[] = [];
 
         const lines = text.split(/\r\n|\r|\n/);
         lines.forEach((line, i) => {
@@ -78,5 +110,10 @@ export class GLSLSemanticProvider implements DocumentSemanticTokensProvider {
             });
         });
         return r;
+    }
+
+    private parseText(text: string): IParsedToken[] {
+        const structs = this.extractStructNames(text);
+        return this.parseTextWithStructs(text, structs);
     }
 }

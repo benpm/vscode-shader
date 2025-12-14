@@ -13,6 +13,7 @@ import HLSLSignatureHelpProvider from './hlsl/HLSLSignatureHelpProvider';
 import HLSLSymbolProvider from './hlsl/symbolProvider';
 import HLSLDefinitionProvider from './hlsl/definitionProvider';
 import HLSLReferenceProvider from './hlsl/referenceProvider';
+import IncludeDefinitionProvider from './includeDefinitionProvider';
 
 import { GLSLSemanticProvider, GLSLSemanticProviderLegend } from './glsl/semanticProvider';
 import GLSLHoverProvider from './glsl/GLSLHoverProvider';
@@ -50,6 +51,18 @@ const HLSLDocumentSelector = [
 const GLSLDocumentSelector = [
     { language: 'glsl', scheme: 'file' },
     { language: 'glsl', scheme: 'untitled' },
+];
+
+const CgDocumentSelector = [
+    { language: 'cg', scheme: 'file' },
+    { language: 'cg', scheme: 'untitled' },
+];
+
+// Combined selector for all shader languages (for include directive support)
+const AllShaderDocumentSelector = [
+    ...HLSLDocumentSelector,
+    ...GLSLDocumentSelector,
+    ...CgDocumentSelector,
 ];
 
 function searchRgPath()
@@ -115,6 +128,11 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.languages.registerDefinitionProvider(HLSLDocumentSelector, definitionProvider));
     context.subscriptions.push(vscode.languages.registerImplementationProvider(HLSLDocumentSelector, definitionProvider));
     context.subscriptions.push(vscode.languages.registerTypeDefinitionProvider(HLSLDocumentSelector, definitionProvider));
+
+    // Register include definition provider for all shader languages
+    // This allows Ctrl+Click on #include paths to open the included file
+    let includeDefinitionProvider = new IncludeDefinitionProvider();
+    context.subscriptions.push(vscode.languages.registerDefinitionProvider(AllShaderDocumentSelector, includeDefinitionProvider));
 
     if (vscode.extensions.getExtension('ms-vscode.cpptools') !== undefined) {
         let formatingProvider = new HLSLFormatingProvider();
